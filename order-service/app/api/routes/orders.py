@@ -315,7 +315,7 @@ async def cancel_order(
     """
     Cancel an order (if not shipped).
     
-    This will set the order status to cancelled and release inventory.
+    This will set the order status to cancelled and release inventory via RabbitMQ.
     """
     # Validate the order ID
     if not ObjectId.is_valid(order_id):
@@ -356,11 +356,23 @@ async def cancel_order(
     ]
     
     if current_status in inventory_states:
+        # NEW: Use RabbitMQ instead of direct HTTP calls
         for item in order["items"]:
-            await inventory_service.release_inventory(
-                item["product_id"],
-                item["quantity"]
-            )
+            try:
+                await rabbitmq_service.rabbitmq_client.publish(
+                    queue_name="inventory_release",
+                    message={
+                        "order_id": order_id,
+                        "product_id": item["product_id"],
+                        "quantity": item["quantity"],
+                        "reason": "order_cancelled",
+                        "timestamp": datetime.utcnow().isoformat()
+                    }
+                )
+                logger.info(f"Published inventory release message for order {order_id}, product {item['product_id']}")
+            except Exception as e:
+                logger.error(f"Failed to publish inventory release message: {str(e)}")
+                # In production, you might want to implement fallback logic here
     
     # Update the order status to cancelled
     await db["orders"].update_one(
