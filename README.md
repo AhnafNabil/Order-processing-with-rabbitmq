@@ -194,34 +194,25 @@ curl -s -X GET "http://localhost/api/v1/inventory/$AIRPODS_ID" -H "Authorization
 
 **🎯 Story Point**: The order is created instantly (status: "pending"), while inventory is reserved asynchronously via RabbitMQ. Sarah gets immediate confirmation!
 
----
-
 ## Chapter 4: Processing Sarah's Order
 
 ### Updating Order Status
+
 ```bash
-# Payment team marks order as paid
 curl -X PUT "http://localhost/api/v1/orders/$ORDER_ID/status" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"status": "paid"}' | jq '{id: ._id, status: .status, updated_at: .updated_at}'
-
-# Later, shipping team marks as shipped
-curl -X PUT "http://localhost/api/v1/orders/$ORDER_ID/status" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"status": "shipped"}' | jq '{id: ._id, status: .status}'
 ```
-
----
 
 ## Chapter 5: The Cancellation Crisis
 
-*Sarah's friend also wants to order, but then changes his mind. This tests our cancellation system.*
+*Sarah also wants to order for her friend, but then changes her mind. This tests our cancellation system.*
 
-### Friend Places an Order
+### Places an Order for her friend
+
+Orders an iPhone for her friend:
 ```bash
-# Friend orders an iPhone
 FRIEND_ORDER=$(curl -s -X POST "http://localhost/api/v1/orders/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -242,45 +233,47 @@ FRIEND_ORDER=$(curl -s -X POST "http://localhost/api/v1/orders/" \
       "country": "USA"
     }
   }')
-
-FRIEND_ORDER_ID=$(echo $FRIEND_ORDER | jq -r ._id)
 ```
 
 ### Inventory Before Cancellation
+
 ```bash
-curl -s -X GET "http://localhost/api/v1/inventory/$IPHONE_ID" -H "Authorization: Bearer $TOKEN" | jq '{available: .available_quantity, reserved: .reserved_quantity}'
+curl -s -X GET "http://localhost/api/v1/inventory/$IPHONE_ID" -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
-### Friend Cancels the Order
+### Cancels the Order
+
 ```bash
-# Friend changes his mind and cancels
 curl -X DELETE "http://localhost/api/v1/orders/$FRIEND_ORDER_ID" -H "Authorization: Bearer $TOKEN"
+```
 
-# Check that RabbitMQ processed the cancellation
-curl -s -u guest:guest http://localhost:15672/api/queues/%2F/inventory_release | jq '{total_published: (.message_stats.publish // 0)}'
+Check that RabbitMQ processed the cancellation:
+```bash
+curl -s -u guest:guest http://localhost:15672/api/queues/%2F/inventory_release | jq .
+```
 
-# Verify inventory was released
-curl -s -X GET "http://localhost/api/v1/inventory/$IPHONE_ID" -H "Authorization: Bearer $TOKEN" | jq '{available: .available_quantity, reserved: .reserved_quantity}'
+Check that inventory was released:
+```bash
+curl -s -X GET "http://localhost/api/v1/inventory/$IPHONE_ID" -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
 **🎯 Story Point**: Inventory is automatically released via RabbitMQ when orders are cancelled, ensuring accurate stock levels.
 
----
-
 ## Chapter 6: Black Friday Disaster (Service Outage Test)
 
-*It's Black Friday! Suddenly, the inventory service crashes due to high load. But TechMart keeps running...*
+*It's Black Friday! Suddenly, the inventory service crashes due to high load. But our system keeps running...*
 
 ### The Crash Happens
+
+Inventory service crashes during peak traffic:
 ```bash
-# Inventory service crashes during peak traffic
 docker-compose stop inventory-service
-docker-compose ps inventory-service
 ```
 
 ### Customers Keep Shopping
+
+Customer places order while service is down:
 ```bash
-# Customer places order while service is down
 BLACKFRIDAY_ORDER=$(curl -s -X POST "http://localhost/api/v1/orders/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -301,80 +294,76 @@ BLACKFRIDAY_ORDER=$(curl -s -X POST "http://localhost/api/v1/orders/" \
       "country": "USA"
     }
   }')
-
-BLACKFRIDAY_ORDER_ID=$(echo $BLACKFRIDAY_ORDER | jq -r ._id)
-echo "Black Friday Order ID: $BLACKFRIDAY_ORDER_ID"
-echo $BLACKFRIDAY_ORDER | jq '{status: .status, message: "Order accepted even with service down!"}'
 ```
 
 ### Messages Queue Up
+
+Check that messages are waiting in queue:
 ```bash
-# Check that messages are waiting in queue
-curl -s -u guest:guest http://localhost:15672/api/queues/%2F/order_created | jq '{messages_waiting: .messages, consumers: .consumers}'
+curl -s -u guest:guest http://localhost:15672/api/queues/%2F/order_created | jq .
 ```
 
 ### Customer Tries to Cancel During Outage
-```bash
-# Customer decides to cancel during the outage
-curl -X DELETE "http://localhost/api/v1/orders/$BLACKFRIDAY_ORDER_ID" -H "Authorization: Bearer $TOKEN"
 
-# Cancellation message is also queued
-curl -s -u guest:guest http://localhost:15672/api/queues/%2F/inventory_release | jq '{messages_waiting: .messages}'
+Customer decides to cancel during the outage:
+```bash
+curl -X DELETE "http://localhost/api/v1/orders/$BLACKFRIDAY_ORDER_ID" -H "Authorization: Bearer $TOKEN"
+```
+
+Check that cancellation message is also queued:
+```bash
+curl -s -u guest:guest http://localhost:15672/api/queues/%2F/inventory_release | jq .
 ```
 
 ### Service Recovery
+
+DevOps team fixes the service:
 ```bash
-# DevOps team fixes the service
 docker-compose start inventory-service
+```
 
-# Wait for service to reconnect and process queued messages
-sleep 30
+Check that all messages were processed:
+```bash
+curl -s -u guest:guest http://localhost:15672/api/queues | jq .
+```
 
-# Check that all messages were processed
-curl -s -u guest:guest http://localhost:15672/api/queues | \
-  jq '.[] | select(.name | contains("order") or contains("inventory")) | {name: .name, messages_waiting: .messages}'
-
-# Verify order was processed and then cancelled
-curl -s -X GET "http://localhost/api/v1/orders/$BLACKFRIDAY_ORDER_ID" -H "Authorization: Bearer $TOKEN" | jq '{status: .status}'
+Verify order was processed and then cancelled:
+```bash
+curl -s -X GET "http://localhost/api/v1/orders/$BLACKFRIDAY_ORDER_ID" -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
 **🎯 Story Point**: Even during service outages, orders are accepted and queued. When services recover, everything processes automatically!
-
----
 
 ## Chapter 7: The Final Inventory Report
 
 *At the end of the day, let's see how our system performed.*
 
 ### Order Summary
+
+View all orders from today:
 ```bash
-# View all orders from today
 curl -s -X GET "http://localhost/api/v1/orders/" -H "Authorization: Bearer $TOKEN" | \
   jq '.[] | {id: ._id, status: .status, total_price: .total_price}'
 ```
 
 ### Inventory Status
+
+Check final inventory levels:
 ```bash
-# Check final inventory levels
 curl -s -X GET "http://localhost/api/v1/inventory/" -H "Authorization: Bearer $TOKEN" | \
   jq '.[] | {product_id: .product_id, available: .available_quantity, reserved: .reserved_quantity, threshold: .reorder_threshold}'
 ```
 
 ### RabbitMQ Performance Report
+
+See total message throughput:
 ```bash
-# See total message throughput
 curl -s -u guest:guest http://localhost:15672/api/queues | \
   jq '.[] | select(.name | contains("order") or contains("inventory")) | {
     queue: .name,
     total_processed: (.message_stats.deliver // 0),
     currently_waiting: .messages
   }'
-```
-
-### Products Needing Restock
-```bash
-# Check which products are below reorder threshold
-curl -s -X GET "http://localhost/api/v1/inventory/low-stock" -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
 ## The Story's Lessons
