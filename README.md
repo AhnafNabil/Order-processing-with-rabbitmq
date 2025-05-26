@@ -62,7 +62,8 @@ TOKEN="eyJhbGciOiJS..."  # Replace with the actual token from the response
 
 Saving the user ID:
 ```bash
-USER_ID=$(curl -s -X GET "http://localhost/api/v1/users/me" -H "Authorization: Bearer $TOKEN" | jq -r .id)
+USER_ID=$(curl -s -X GET "http://localhost/api/v1/users/me" \
+  -H "Authorization: Bearer $TOKEN" | jq -r .id)
 ```
 
 ### Adding Her Shipping Address
@@ -123,12 +124,14 @@ AIRPODS_ID="airpods id" # Replace with the actual id from the response
 
 Check that inventory was automatically created for iPhone:
 ```bash
-curl -s -X GET "http://localhost/api/v1/inventory/$IPHONE_ID" -H "Authorization: Bearer $TOKEN" | jq .
+curl -s -X GET "http://localhost/api/v1/inventory/$IPHONE_ID" \
+  -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
 Check inventory for AirPods:
 ```bash
-curl -s -X GET "http://localhost/api/v1/inventory/$AIRPODS_ID" -H "Authorization: Bearer $TOKEN" | jq .
+curl -s -X GET "http://localhost/api/v1/inventory/$AIRPODS_ID" \
+  -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
 **🎯 Scenario Point**: Notice how inventory records are created automatically with smart thresholds (10% of stock, minimum 5 units).
@@ -141,12 +144,14 @@ curl -s -X GET "http://localhost/api/v1/inventory/$AIRPODS_ID" -H "Authorization
 
 Sarah sees all available products:
 ```bash
-curl -s -X GET "http://localhost/api/v1/products/" -H "Authorization: Bearer $TOKEN" | jq .
+curl -s -X GET "http://localhost/api/v1/products/" \
+  -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
 She filters by Electronics category:
 ```bash
-curl -s -X GET "http://localhost/api/v1/products/?category=Electronics" -H "Authorization: Bearer $TOKEN" | jq .
+curl -s -X GET "http://localhost/api/v1/products/?category=Electronics" \
+  -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
 ### Sarah Places Her Order
@@ -198,11 +203,13 @@ curl -s -u guest:guest http://localhost:15672/api/queues | \
 
 Check that inventory was automatically reserved:
 ```bash
-curl -s -X GET "http://localhost/api/v1/inventory/$IPHONE_ID" -H "Authorization: Bearer $TOKEN" | jq .
+curl -s -X GET "http://localhost/api/v1/inventory/$IPHONE_ID" \
+  -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
 ```bash
-curl -s -X GET "http://localhost/api/v1/inventory/$AIRPODS_ID" -H "Authorization: Bearer $TOKEN" | jq .
+curl -s -X GET "http://localhost/api/v1/inventory/$AIRPODS_ID" \
+  -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
 **🎯 Story Point**: The order is created instantly (status: "pending"), while inventory is reserved asynchronously via RabbitMQ. Sarah gets immediate confirmation!
@@ -256,13 +263,15 @@ FRIEND_ORDER_ID="order id" # Replace with the actual id from the response
 ### Inventory Before Cancellation
 
 ```bash
-curl -s -X GET "http://localhost/api/v1/inventory/$IPHONE_ID" -H "Authorization: Bearer $TOKEN" | jq .
+curl -s -X GET "http://localhost/api/v1/inventory/$IPHONE_ID" \
+  -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
 ### Cancels the Order
 
 ```bash
-curl -X DELETE "http://localhost/api/v1/orders/$FRIEND_ORDER_ID" -H "Authorization: Bearer $TOKEN"
+curl -X DELETE "http://localhost/api/v1/orders/$FRIEND_ORDER_ID" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 Check that RabbitMQ processed the cancellation:
@@ -273,7 +282,8 @@ curl -s -u guest:guest http://localhost:15672/api/queues | \
 
 Check that inventory was released:
 ```bash
-curl -s -X GET "http://localhost/api/v1/inventory/$IPHONE_ID" -H "Authorization: Bearer $TOKEN" | jq .
+curl -s -X GET "http://localhost/api/v1/inventory/$IPHONE_ID" \
+  -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
 **🎯 Story Point**: Inventory is automatically released via RabbitMQ when orders are cancelled, ensuring accurate stock levels.
@@ -324,20 +334,27 @@ BLACKFRIDAY_ORDER_ID="order id" # Replace with the actual id from the response
 
 Check that messages are waiting in queue:
 ```bash
-curl -s -u guest:guest http://localhost:15672/api/queues/%2F/order_created | jq '{messages_waiting: .messages, consumers: .consumers}'
+curl -s -u guest:guest http://localhost:15672/api/queues/%2F/order_created | \
+  jq '{messages_waiting: .messages, consumers: .consumers}'
 ```
+
+![alt text](./images/image.png)
 
 ### Customer Tries to Cancel During Outage
 
 Customer decides to cancel during the outage:
 ```bash
-curl -X DELETE "http://localhost/api/v1/orders/$BLACKFRIDAY_ORDER_ID" -H "Authorization: Bearer $TOKEN"
+curl -X DELETE "http://localhost/api/v1/orders/$BLACKFRIDAY_ORDER_ID" \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 Check that cancellation message is also queued:
 ```bash
-curl -s -u guest:guest http://localhost:15672/api/queues/%2F/inventory_release | jq '{messages_waiting: .messages}'
+curl -s -u guest:guest http://localhost:15672/api/queues/%2F/inventory_release | \
+  jq '{messages_waiting: .messages}'
 ```
+
+![alt text](./images/image-1.png)
 
 ### Service Recovery
 
@@ -352,9 +369,12 @@ curl -s -u guest:guest http://localhost:15672/api/queues | \
   jq '.[] | select(.name | contains("order") or contains("inventory")) | {name: .name, messages_waiting: .messages}'
 ```
 
+![alt text](./images/image-2.png)
+
 Verify order was processed and then cancelled:
 ```bash
-curl -s -X GET "http://localhost/api/v1/orders/$BLACKFRIDAY_ORDER_ID" -H "Authorization: Bearer $TOKEN" | jq .
+curl -s -X GET "http://localhost/api/v1/orders/$BLACKFRIDAY_ORDER_ID" \
+  -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
 **🎯 Story Point**: Even during service outages, orders are accepted and queued. When services recover, everything processes automatically!
