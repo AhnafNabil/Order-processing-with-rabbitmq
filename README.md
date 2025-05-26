@@ -50,9 +50,14 @@ curl -X POST "http://localhost/api/v1/auth/register" \
 
 Saving the authentication token:
 ```bash
-TOKEN=$(curl -s -X POST "http://localhost/api/v1/auth/login" \
+curl -s -X POST "http://localhost/api/v1/auth/login" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=sarah@example.com&password=Password123" | jq -r .access_token)
+  -d "username=sarah@example.com&password=Password123" | jq .
+```
+
+Save the access_token for subsequent requests:
+```bash
+TOKEN="eyJhbGciOiJS..."  # Replace with the actual token from the response
 ```
 
 Saving the user ID:
@@ -80,7 +85,7 @@ curl -X POST "http://localhost/api/v1/users/me/addresses" \
 
 ### Adding the iPhone 15
 ```bash
-IPHONE=$(curl -s -X POST "http://localhost/api/v1/products/" \
+curl -s -X POST "http://localhost/api/v1/products/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -89,12 +94,16 @@ IPHONE=$(curl -s -X POST "http://localhost/api/v1/products/" \
     "category": "Electronics",
     "price": 999.99,
     "quantity": 25
-  }')
+  }' | jq .
+```
+
+```bash
+IPHONE_ID="iphone id" # Replace with the actual id from the response
 ```
 
 ### Adding AirPods
 ```bash
-AIRPODS=$(curl -s -X POST "http://localhost/api/v1/products/" \
+curl -s -X POST "http://localhost/api/v1/products/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -103,7 +112,11 @@ AIRPODS=$(curl -s -X POST "http://localhost/api/v1/products/" \
     "category": "Audio",
     "price": 249.99,
     "quantity": 50
-  }')
+  }' | jq .
+```
+
+```bash
+AIRPODS_ID="airpods id" # Replace with the actual id from the response
 ```
 
 ### Verifying Automatic Inventory Creation
@@ -128,7 +141,7 @@ curl -s -X GET "http://localhost/api/v1/inventory/$AIRPODS_ID" -H "Authorization
 
 Sarah sees all available products:
 ```bash
-curl -s -X GET "http://localhost/api/v1/products/" -H "Authorization: Bearer $TOKEN" | jq '.[] | {name: .name, price: .price, category: .category}'
+curl -s -X GET "http://localhost/api/v1/products/" -H "Authorization: Bearer $TOKEN" | jq .
 ```
 
 She filters by Electronics category:
@@ -140,7 +153,7 @@ curl -s -X GET "http://localhost/api/v1/products/?category=Electronics" -H "Auth
 
 Sarah orders an iPhone and AirPods:
 ```bash
-ORDER=$(curl -s -X POST "http://localhost/api/v1/orders/" \
+curl -s -X POST "http://localhost/api/v1/orders/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -165,20 +178,19 @@ ORDER=$(curl -s -X POST "http://localhost/api/v1/orders/" \
       "postal_code": "94105",
       "country": "USA"
     }
-  }')
+  }' | jq .
 ``` 
 
-Sarah can see the order from here:
+Save the order id for subsequent requests:
 ```bash
-echo $ORDER | jq '{id: ._id, status: .status, total_price: .total_price}'
+ORDER_ID="order id" # Replace with the actual id from the response
 ```
 
 ### Behind the Scenes: RabbitMQ Magic
 
 Check RabbitMQ queues to see the asynchronous processing:
 ```bash
-curl -s -u guest:guest http://localhost:15672/api/queues | \
-  jq '.[] | select(.name | contains("order") or contains("inventory")) | {name: .name, total_published: (.message_stats.publish // 0)}'
+curl -s -u guest:guest http://localhost:15672/api/queues | jq .
 ```
 
 ### Verifying Inventory Reservation
@@ -213,7 +225,7 @@ curl -X PUT "http://localhost/api/v1/orders/$ORDER_ID/status" \
 
 Orders an iPhone for her friend:
 ```bash
-FRIEND_ORDER=$(curl -s -X POST "http://localhost/api/v1/orders/" \
+curl -s -X POST "http://localhost/api/v1/orders/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -232,7 +244,12 @@ FRIEND_ORDER=$(curl -s -X POST "http://localhost/api/v1/orders/" \
       "postal_code": "94105",
       "country": "USA"
     }
-  }')
+  }' | jq .
+```
+
+Save the order id for subsequent requests:
+```bash
+FRIEND_ORDER_ID="order id" # Replace with the actual id from the response
 ```
 
 ### Inventory Before Cancellation
@@ -274,7 +291,7 @@ docker-compose stop inventory-service
 
 Customer places order while service is down:
 ```bash
-BLACKFRIDAY_ORDER=$(curl -s -X POST "http://localhost/api/v1/orders/" \
+curl -s -X POST "http://localhost/api/v1/orders/" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -293,7 +310,12 @@ BLACKFRIDAY_ORDER=$(curl -s -X POST "http://localhost/api/v1/orders/" \
       "postal_code": "94105", 
       "country": "USA"
     }
-  }')
+  }' | jq .
+```
+
+Save the order id for subsequent requests:
+```bash
+BLACKFRIDAY_ORDER_ID="order id" # Replace with the actual id from the response
 ```
 
 ### Messages Queue Up
