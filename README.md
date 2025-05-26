@@ -190,7 +190,8 @@ ORDER_ID="order id" # Replace with the actual id from the response
 
 Check RabbitMQ queues to see the asynchronous processing:
 ```bash
-curl -s -u guest:guest http://localhost:15672/api/queues | jq .
+curl -s -u guest:guest http://localhost:15672/api/queues | \
+  jq '.[] | select(.name | contains("order") or contains("inventory")) | {name: .name, total_published: (.message_stats.publish // 0)}'
 ```
 
 ### Verifying Inventory Reservation
@@ -266,7 +267,8 @@ curl -X DELETE "http://localhost/api/v1/orders/$FRIEND_ORDER_ID" -H "Authorizati
 
 Check that RabbitMQ processed the cancellation:
 ```bash
-curl -s -u guest:guest http://localhost:15672/api/queues/%2F/inventory_release | jq .
+curl -s -u guest:guest http://localhost:15672/api/queues | \
+  jq '.[] | select(.name | contains("order") or contains("inventory")) | {name: .name, total_published: (.message_stats.publish // 0)}'
 ```
 
 Check that inventory was released:
@@ -322,7 +324,7 @@ BLACKFRIDAY_ORDER_ID="order id" # Replace with the actual id from the response
 
 Check that messages are waiting in queue:
 ```bash
-curl -s -u guest:guest http://localhost:15672/api/queues/%2F/order_created | jq .
+curl -s -u guest:guest http://localhost:15672/api/queues/%2F/order_created | jq '{messages_waiting: .messages, consumers: .consumers}'
 ```
 
 ### Customer Tries to Cancel During Outage
@@ -334,7 +336,7 @@ curl -X DELETE "http://localhost/api/v1/orders/$BLACKFRIDAY_ORDER_ID" -H "Author
 
 Check that cancellation message is also queued:
 ```bash
-curl -s -u guest:guest http://localhost:15672/api/queues/%2F/inventory_release | jq .
+curl -s -u guest:guest http://localhost:15672/api/queues/%2F/inventory_release | jq '{messages_waiting: .messages}'
 ```
 
 ### Service Recovery
@@ -346,7 +348,8 @@ docker-compose start inventory-service
 
 Check that all messages were processed:
 ```bash
-curl -s -u guest:guest http://localhost:15672/api/queues | jq .
+curl -s -u guest:guest http://localhost:15672/api/queues | \
+  jq '.[] | select(.name | contains("order") or contains("inventory")) | {name: .name, messages_waiting: .messages}'
 ```
 
 Verify order was processed and then cancelled:
